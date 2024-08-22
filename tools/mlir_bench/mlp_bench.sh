@@ -38,14 +38,14 @@ while getopts "t:l:b:D" arg; do
 done
 
 if [ ! $NUM_LAYERS ]; then
-  NUM_LAYERS=3
+  NUM_LAYERS=1
 fi
 
 OV_ROOT=$(git rev-parse --show-toplevel)
 BENCH_ROOT=$(realpath "${OV_ROOT}/tools/mlir_bench")
 
 MODEL_GEN=$(realpath "${BENCH_ROOT}/ov_model_gen.py")
-BENCH_RUNNER=benchmark_app
+BENCH_RUNNER=${OV_ROOT}/bin/intel64/Release/benchmark_app
 
 # Initial validation.
 if ! [ -d "${OV_ROOT}" ]; then
@@ -77,7 +77,6 @@ MINI_BATCHES=( 256 )
 if [ ! "${DATA_TYPE}" ]; then
     DATA_TYPE="f32"
 fi
-MODEL_NAME="MLIR_MLP_BENCH.xml"
 
 echo "Result type: time [ms] - NUM LAYERS: ${NUM_LAYERS}"
 for MB in "${MINI_BATCHES[@]}"; do
@@ -96,6 +95,7 @@ for MB in "${MINI_BATCHES[@]}"; do
         MODEL_CONFIG=(-l="${MODEL_STRING}")
     fi
     echo "MODEL_CONFIG=${MODEL_CONFIG}"
+    MODEL_NAME="MLIR_MLP_BENCH_${DATA_TYPE}_${MB}_${LAYER}.xml"
     GEN_FLAGS=(-t ${DATA_TYPE} -n ${MODEL_NAME})
     if [ "${IS_DYNAMIC}" ]; then
         GEN_FLAGS+=(--dynamic)
@@ -117,6 +117,7 @@ for MB in "${MINI_BATCHES[@]}"; do
     # Benchmark config. Disable parallelism.
     PERF_FLAGS="-niter 1000 -hint none -nstreams 1 -nthreads 1"
     BENCH_FLAGS="-m ${MODEL_NAME} -d CPU -ip ${PRECISION} -infer_precision ${DATA_TYPE} ${DATA_SHAPE[@]} ${PERF_FLAGS}"
+    echo "Bench cmd: ${BENCH_RUNNER} ${BENCH_FLAGS}"
     ${BENCH_RUNNER} ${BENCH_FLAGS} 2>/dev/null | \
         sed -nE "s/.*\[ INFO \]\s*Median:\s*([0-9.]+).*/\\1/p"
   done
