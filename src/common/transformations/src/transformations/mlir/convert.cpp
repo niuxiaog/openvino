@@ -191,6 +191,10 @@ mlir::OwningOpRef<mlir::ModuleOp> ngraph_to_mlir(MLIRContext* context,
     auto sysSpec = TargetSystemSpecAttr::get(context, ArrayRef(std::pair(deviceStr, deviceSpec)));
     module.getOperation()->setAttr("#dlti.sys_spec", sysSpec);
 
+    module.getOperation()->getRegions().front().getBlocks().front().getOperations().front().setAttr(
+        "onednn_graph.const_args_index",
+        moduleBuilder.getI32ArrayAttr({0, 2}));
+
     ConversionContext conversion_context(context, &block_builder);
 
     for (size_t i = 0; i < inputs.size(); ++i) {
