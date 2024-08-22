@@ -137,9 +137,56 @@ mlir::OwningOpRef<mlir::ModuleOp> ngraph_to_mlir(MLIRContext* context,
     // Affix target information attribute to the module to be used, at its discretion,
     // by the MLIR-compiler that consumes this module.
     auto tileSize = IntegerAttr::get(IntegerType::get(context, 32), 32);
-    auto key = StringAttr::get(context, "tile_size");
-    DataLayoutEntryInterface entry = DataLayoutEntryAttr::get(context, key, tileSize);
-    TargetDeviceSpecInterface deviceSpec = TargetDeviceSpecAttr::get(context, ArrayRef(entry));
+    auto tileSizeKey = StringAttr::get(context, "tile_size");
+    DataLayoutEntryInterface tileSizeEntry = DataLayoutEntryAttr::get(context, tileSizeKey, tileSize);
+
+    int numThreadsInt = 1;
+    if (char* numThreadsEnv = std::getenv("OMP_NUM_THREADS")) {
+        numThreadsInt = std::atoi(numThreadsEnv);
+    }
+    auto numThreads = IntegerAttr::get(IntegerType::get(context, 32), numThreadsInt);
+    auto numThreadsKey = StringAttr::get(context, "num_threads");
+    DataLayoutEntryInterface numThreadsEntry = DataLayoutEntryAttr::get(context, numThreadsKey, numThreads);
+
+    int L1CacheSizeInt = 49152;
+    if (char* L1CacheSizeEnv = std::getenv("L1_CACHE_SIZE")) {
+        L1CacheSizeInt = std::atoi(L1CacheSizeEnv);
+    }
+    auto L1CacheSize = IntegerAttr::get(IntegerType::get(context, 32), L1CacheSizeInt);
+    auto L1CacheSizeKey = StringAttr::get(context, "L1_cache_size_in_bytes");
+    DataLayoutEntryInterface L1CacheSizeEntry = DataLayoutEntryAttr::get(context, L1CacheSizeKey, L1CacheSize);
+
+    int L2CacheSizeInt = 2097152;
+    if (char* L2CacheSizeEnv = std::getenv("L2_CACHE_SIZE")) {
+        L2CacheSizeInt = std::atoi(L2CacheSizeEnv);
+    }
+    auto L2CacheSize = IntegerAttr::get(IntegerType::get(context, 32), L2CacheSizeInt);
+    auto L2CacheSizeKey = StringAttr::get(context, "L2_cache_size_in_bytes");
+    DataLayoutEntryInterface L2CacheSizeEntry = DataLayoutEntryAttr::get(context, L2CacheSizeKey, L2CacheSize);
+
+    int L3CacheSizeInt = 1966080;
+    if (char* L3CacheSizeEnv = std::getenv("L3_CACHE_SIZE")) {
+        L3CacheSizeInt = std::atoi(L3CacheSizeEnv);
+    }
+    auto L3CacheSize = IntegerAttr::get(IntegerType::get(context, 32), L3CacheSizeInt);
+    auto L3CacheSizeKey = StringAttr::get(context, "L3_cache_size_in_bytes");
+    DataLayoutEntryInterface L3CacheSizeEntry = DataLayoutEntryAttr::get(context, L3CacheSizeKey, L3CacheSize);
+
+    int maxVectorWidthInt = 512;
+    if (char* maxVectorWidthEnv = std::getenv("MAX_VECTOR_WIDTH")) {
+        maxVectorWidthInt = std::atoi(maxVectorWidthEnv);
+    }
+    auto maxVectorWidth = IntegerAttr::get(IntegerType::get(context, 32), maxVectorWidthInt);
+    auto maxVectorWidthKey = StringAttr::get(context, "max_vector_width");
+    DataLayoutEntryInterface maxVectorWidthEntry = DataLayoutEntryAttr::get(context, maxVectorWidthKey, maxVectorWidth);
+
+    TargetDeviceSpecInterface deviceSpec = TargetDeviceSpecAttr::get(context,
+                                                                     ArrayRef({tileSizeEntry,
+                                                                               numThreadsEntry,
+                                                                               L1CacheSizeEntry,
+                                                                               L2CacheSizeEntry,
+                                                                               L3CacheSizeEntry,
+                                                                               maxVectorWidthEntry}));
     auto deviceStr = StringAttr::get(context, "CPU");
     auto sysSpec = TargetSystemSpecAttr::get(context, ArrayRef(std::pair(deviceStr, deviceSpec)));
     module.getOperation()->setAttr("#dlti.sys_spec", sysSpec);
