@@ -12,7 +12,7 @@ if (NOT DEFINED GRAPH_COMPILER_LIBS)
         FetchContent_Declare(
                 GC
                 GIT_REPOSITORY https://github.com/intel/graph-compiler.git
-                GIT_TAG main
+                GIT_TAG zhicong/perf_test
                 FIND_PACKAGE_ARGS NAMES GraphCompiler
         )
 
@@ -31,6 +31,8 @@ if (NOT DEFINED GRAPH_COMPILER_LIBS)
             GcInterface
             GcJitWrapper
             GcCpuRuntime
+            MLIRCPURuntimeTransforms
+            MLIRMicrokernelTransforms
     )
     set_property(GLOBAL PROPERTY GRAPH_COMPILER_LIBS ${GRAPH_COMPILER_LIBS})
 endif ()
