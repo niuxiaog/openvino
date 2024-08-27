@@ -12,7 +12,7 @@ if (NOT DEFINED GRAPH_COMPILER_LIBS)
         FetchContent_Declare(
                 GC
                 GIT_REPOSITORY https://github.com/intel/graph-compiler.git
-                GIT_TAG zhicong/perf_test
+                GIT_TAG zhicong/perf_test2
                 FIND_PACKAGE_ARGS NAMES GraphCompiler
         )
 
