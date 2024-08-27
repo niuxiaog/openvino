@@ -6,17 +6,18 @@
 # Runs OV MLP benchmarks.
 
 die_syntax() {
-  echo "Syntax: $0 [-t (f32|f16|bf16|...)] [-b (mlp)] [-D] [-l 3]"
+  echo "Syntax: $0 [-t (f32|f16|bf16|...)] [-b (mlp)] [-D] [-l 3] [-n 1]"
   echo ""
   echo "  -t: Optional data type"
   echo "  -b: Optional baseline model"
   echo "  -l: Optional number of layers (def:3)"
   echo "  -D: Set model shapes to dynamic"
+  echo "  -n: Set number of threads (default: 1)"
   exit 1
 }
 
 # Cmd-line opts
-while getopts "t:l:b:D" arg; do
+while getopts "t:l:b:D:n:" arg; do
   case ${arg} in
     t)
       DATA_TYPE=${OPTARG}
@@ -30,6 +31,9 @@ while getopts "t:l:b:D" arg; do
     D)
       IS_DYNAMIC=true
       ;;
+    n)
+      NUM_THREADS=${OPTARG}
+      ;;
     ?)
       echo "Invalid option: ${OPTARG}"
       die_syntax
@@ -39,6 +43,10 @@ done
 
 if [ ! $NUM_LAYERS ]; then
   NUM_LAYERS=1
+fi
+
+if [ ! $NUM_THREADS ]; then
+  NUM_THREADS=1
 fi
 
 OV_ROOT=$(git rev-parse --show-toplevel)
@@ -114,11 +122,11 @@ for MB in "${MINI_BATCHES[@]}"; do
     if [ "${IS_DYNAMIC}" ]; then
         DATA_SHAPE=(-data_shape [${MB},${LAYER}])
     fi
-    # Benchmark config. Disable parallelism.
-    PERF_FLAGS="-niter 1000 -hint none -nstreams 1 -nthreads 1"
+    # Benchmark config. Enable openmp parallelism.
+    PERF_FLAGS="-niter 1000 -hint none -nstreams 1 -nthreads ${NUM_THREADS}"
     BENCH_FLAGS="-m ${MODEL_NAME} -d CPU -ip ${PRECISION} -infer_precision ${DATA_TYPE} ${DATA_SHAPE[@]} ${PERF_FLAGS}"
-    echo "Bench cmd: ${BENCH_RUNNER} ${BENCH_FLAGS}"
-    ${BENCH_RUNNER} ${BENCH_FLAGS} 2>/dev/null | \
+    echo "Bench cmd: OMP_NUM_THREADS=${NUM_THREADS} ${BENCH_RUNNER} ${BENCH_FLAGS}"
+    OMP_NUM_THREADS=${NUM_THREADS} ${BENCH_RUNNER} ${BENCH_FLAGS} 2>/dev/null | \
         sed -nE "s/.*\[ INFO \]\s*Median:\s*([0-9.]+).*/\\1/p"
   done
 done
