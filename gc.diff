@@ -1,0 +1,79 @@
+diff --git a/include/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmInterface.h b/include/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmInterface.h
+index cb2e080..5c3dc9e 100644
+--- a/include/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmInterface.h
++++ b/include/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmInterface.h
+@@ -26,7 +26,7 @@ extern "C" {
+  * 	                given in dnnl type value.
+  * Output: A handle of dispatched kernel.
+  */
+-int64_t dnnl_brgemm_dispatch(int64_t M, int64_t N, int64_t K, int64_t LDA,
++__attribute__((__visibility__("default"))) int64_t dnnl_brgemm_dispatch(int64_t M, int64_t N, int64_t K, int64_t LDA,
+                              int64_t LDB, int64_t LDC, int64_t stride_a,
+                              int64_t stride_b, float beta, int64_t dtypeA,
+                              int64_t dtypeB);
+@@ -36,14 +36,14 @@ int64_t dnnl_brgemm_dispatch(int64_t M, int64_t N, int64_t K, int64_t LDA,
+  * Inputs: A handle of dispatched kernel.
+  * Output: None.
+  */
+-void dnnl_brgemm_tileconfig(int64_t kernel);
++__attribute__((__visibility__("default"))) void dnnl_brgemm_tileconfig(int64_t kernel);
+ 
+ /**
+  * Release the current AMX tile context.
+  * Inputs: None.
+  * Output: None.
+  */
+-void dnnl_brgemm_tilerelease();
++__attribute__((__visibility__("default"))) void dnnl_brgemm_tilerelease();
+ 
+ /**
+  * Execute the given kernel with given parameters.
+@@ -54,7 +54,7 @@ void dnnl_brgemm_tilerelease();
+  * 	num: Batch size of Brgemm.
+  * Output: None.
+  */
+-void dnnl_brgemm_execute(int64_t kernel, void *A, uint64_t A_offset, void *B,
++__attribute__((__visibility__("default"))) void dnnl_brgemm_execute(int64_t kernel, void *A, uint64_t A_offset, void *B,
+                          uint64_t B_offset, void *C, uint64_t C_offset,
+                          int num);
+ }
+diff --git a/lib/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmOnednn.cpp b/lib/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmOnednn.cpp
+index d7dd2cc..bdf0c4d 100644
+--- a/lib/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmOnednn.cpp
++++ b/lib/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmOnednn.cpp
+@@ -64,7 +64,7 @@ static thread_local char scratch[SCRATCH_SIZE] = {0};
+ 
+ extern "C" {
+ 
+-int64_t dnnl_brgemm_dispatch(int64_t M, int64_t N, int64_t K, int64_t LDA,
++__attribute__((__visibility__("default"))) int64_t dnnl_brgemm_dispatch(int64_t M, int64_t N, int64_t K, int64_t LDA,
+                              int64_t LDB, int64_t LDC, int64_t stride_a,
+                              int64_t stride_b, float beta, int64_t dtypeA,
+                              int64_t dtypeB) {
+@@ -109,7 +109,7 @@ int64_t dnnl_brgemm_dispatch(int64_t M, int64_t N, int64_t K, int64_t LDA,
+   return g_brgemm_desc_list.size() - 1;
+ }
+ 
+-void dnnl_brgemm_tileconfig(int64_t kernel_idx) {
++__attribute__((__visibility__("default"))) void dnnl_brgemm_tileconfig(int64_t kernel_idx) {
+   char *palette_buffer = nullptr;
+   {
+     read_lock_guard_t g(g_brgemm_lock);
+@@ -126,7 +126,7 @@ void dnnl_brgemm_tileconfig(int64_t kernel_idx) {
+   amx_tile_configure(palette_buffer);
+ }
+ 
+-void dnnl_brgemm_tilerelease() {
++__attribute__((__visibility__("default"))) void dnnl_brgemm_tilerelease() {
+   if (!mayiuse(avx512_core_amx)) {
+     return;
+   }
+@@ -134,7 +134,7 @@ void dnnl_brgemm_tilerelease() {
+   amx_tile_release();
+ }
+ 
+-void dnnl_brgemm_execute(int64_t kernel_idx, void *A, uint64_t A_offset,
++__attribute__((__visibility__("default"))) void dnnl_brgemm_execute(int64_t kernel_idx, void *A, uint64_t A_offset,
+                          void *B, uint64_t B_offset, void *C, uint64_t C_offset,
+                          int num) {
+   brgemm_kernel_t *kernel = nullptr;
