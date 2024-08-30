@@ -49,6 +49,16 @@ if [ ! $NUM_THREADS ]; then
   NUM_THREADS=1
 fi
 
+if [ $NUM_THREADS == 1 ]; then
+  NUMA_CTL="numactl --physcpubind=4 --membind=0"
+elif [ $NUM_THREADS == 4 ]; then
+  NUMA_CTL="numactl --physcpubind=4-7 --membind=0"
+elif [ $NUM_THREADS == 8 ]; then
+  NUMA_CTL="numactl --physcpubind=4-11 --membind=0"
+else
+  NUMA_CTL=""
+fi
+
 OV_ROOT=$(git rev-parse --show-toplevel)
 BENCH_ROOT=$(realpath "${OV_ROOT}/tools/mlir_bench")
 
@@ -78,10 +88,10 @@ if [ "${BASELINE_MODEL}" ] && [ "${IS_DYNAMIC}" ]; then
 fi
 
 # Kernel config.
-#LAYERS=( 1024 2048 4096 8192 )
-#MINI_BATCHES=( 128 256 512 )
-LAYERS=( 1024 )
-MINI_BATCHES=( 256 )
+LAYERS=( 1024 2048 4096 8192 )
+MINI_BATCHES=( 128 256 512 )
+#LAYERS=( 1024 )
+#MINI_BATCHES=( 256 )
 if [ ! "${DATA_TYPE}" ]; then
     DATA_TYPE="f32"
 fi
@@ -123,10 +133,10 @@ for MB in "${MINI_BATCHES[@]}"; do
         DATA_SHAPE=(-data_shape [${MB},${LAYER}])
     fi
     # Benchmark config. Enable openmp parallelism.
-    PERF_FLAGS="-niter 1000 -hint none -nstreams 1 -nthreads ${NUM_THREADS}"
+    PERF_FLAGS="-niter 100 -hint none -nstreams 1 -nthreads ${NUM_THREADS}"
     BENCH_FLAGS="-m ${MODEL_NAME} -d CPU -ip ${PRECISION} -infer_precision ${DATA_TYPE} ${DATA_SHAPE[@]} ${PERF_FLAGS}"
-    echo "Bench cmd: OMP_NUM_THREADS=${NUM_THREADS} ${BENCH_RUNNER} ${BENCH_FLAGS}"
-    OMP_NUM_THREADS=${NUM_THREADS} ${BENCH_RUNNER} ${BENCH_FLAGS} 2>/dev/null | \
+    echo "Bench cmd: OMP_NUM_THREADS=${NUM_THREADS} ${NUMA_CTL} ${BENCH_RUNNER} ${BENCH_FLAGS}"
+    OMP_NUM_THREADS=${NUM_THREADS} ${NUMA_CTL} ${BENCH_RUNNER} ${BENCH_FLAGS} 2>/dev/null | \
         sed -nE "s/.*\[ INFO \]\s*Median:\s*([0-9.]+).*/\\1/p"
   done
 done

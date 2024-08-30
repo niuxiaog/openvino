@@ -37,6 +37,31 @@ index cb2e080..5c3dc9e 100644
                           uint64_t B_offset, void *C, uint64_t C_offset,
                           int num);
  }
+diff --git a/lib/gc/ExecutionEngine/CPURuntime/MemoryPool.cpp b/lib/gc/ExecutionEngine/CPURuntime/MemoryPool.cpp
+index 7b2790c..36b9c51 100644
+--- a/lib/gc/ExecutionEngine/CPURuntime/MemoryPool.cpp
++++ b/lib/gc/ExecutionEngine/CPURuntime/MemoryPool.cpp
+@@ -239,16 +239,16 @@ static thread_local FILOMemoryPool mainMemoryPool_{mainChunkSize};
+ // if the current thread is a worker thread, use this pool
+ static thread_local FILOMemoryPool threadMemoryPool_{threadlocalChunkSize};
+ 
+-extern "C" void *gcAlignedMalloc(size_t sz) noexcept {
++extern "C" __attribute__((__visibility__("default"))) void *gcAlignedMalloc(size_t sz) noexcept {
+   return mainMemoryPool_.alloc(sz);
+ }
+ 
+-extern "C" void gcAlignedFree(void *p) noexcept { mainMemoryPool_.dealloc(p); }
++extern "C" __attribute__((__visibility__("default"))) void gcAlignedFree(void *p) noexcept { mainMemoryPool_.dealloc(p); }
+ 
+-extern "C" void *gcThreadAlignedMalloc(size_t sz) noexcept {
++extern "C" __attribute__((__visibility__("default"))) void *gcThreadAlignedMalloc(size_t sz) noexcept {
+   return threadMemoryPool_.alloc(sz);
+ }
+ 
+-extern "C" void gcThreadAlignedFree(void *p) noexcept {
++extern "C" __attribute__((__visibility__("default"))) void gcThreadAlignedFree(void *p) noexcept {
+   threadMemoryPool_.dealloc(p);
+ }
 diff --git a/lib/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmOnednn.cpp b/lib/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmOnednn.cpp
 index d7dd2cc..bdf0c4d 100644
 --- a/lib/gc/ExecutionEngine/CPURuntime/Microkernel/BrgemmOnednn.cpp
