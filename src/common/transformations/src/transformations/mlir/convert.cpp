@@ -191,9 +191,16 @@ mlir::OwningOpRef<mlir::ModuleOp> ngraph_to_mlir(MLIRContext* context,
     auto sysSpec = TargetSystemSpecAttr::get(context, ArrayRef(std::pair(deviceStr, deviceSpec)));
     module.getOperation()->setAttr("#dlti.sys_spec", sysSpec);
 
-    module.getOperation()->getRegions().front().getBlocks().front().getOperations().front().setAttr(
-        "onednn_graph.const_args_index",
-        moduleBuilder.getI32ArrayAttr({0, 2}));
+    std::vector<int> compiletime_const_args_index;
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        auto parent = inputs[i].get_node_shared_ptr();
+        if (auto data_const = std::dynamic_pointer_cast<ov::op::v0::Constant>(parent)) {
+            OPENVINO_MLIR_DEBUG_PRINT("Mark #" << i << " input as Constant tensor\n");
+            compiletime_const_args_index.push_back(i);
+        }
+    }
+    func.getOperation()->setAttr("compiletime_const_args_index",
+                                 moduleBuilder.getI32ArrayAttr(compiletime_const_args_index));
 
     ConversionContext conversion_context(context, &block_builder);
 
