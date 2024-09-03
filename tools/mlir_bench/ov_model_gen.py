@@ -178,12 +178,14 @@ class BaselineMLP(nn.Module):
         super(BaselineMLP, self).__init__()
         m = sizes_mnk[0]
         n = sizes_mnk[1]
+        k = sizes_mnk[2]
+        self.weight = torch.empty((k, n), dtype=type).data.normal_(0, 0.01)
         self.bias = torch.empty((m, n), dtype=type).data.fill_(0.01)
         self.relu = nn.ReLU()
         self.layers = layers
-    def forward(self, a, b):
+    def forward(self, a):
         for _ in range(0,self.layers):
-            c = torch.matmul(a, b)
+            c = torch.matmul(a, self.weight)
             c = torch.add(c, self.bias)
             a = self.relu(c)
         return a
@@ -201,8 +203,9 @@ def baseline_MLP(model_desc: str, data_type: str, is_dynamic: bool) -> tuple[nn.
     n = input_shapes[1]
     k = input_shapes[2]
     ov_type = get_ov_type(data_type)
-    inputs = [(ov.PartialShape([m, k]), ov_type), (ov.PartialShape([k, n]), ov_type)]
-    return (mlp, inputs)
+    inputs = [(ov.PartialShape([m, k]), ov_type)]
+    example_inputs = [torch.empty((m, k), dtype=get_torch_type(data_type)).data.normal_(0, 0.01)]
+    return (mlp, inputs, example_inputs)
 
 
 def generate_baseline_model(model_desc: str, data_type: str, file_name: str, is_dynamic: bool = False):
@@ -213,8 +216,8 @@ def generate_baseline_model(model_desc: str, data_type: str, file_name: str, is_
     else:
         assert False, f"Unsupported baseline model data type {model_name}"
 
-    ov_model = ov.convert_model(baseline_tuple[0], input=baseline_tuple[1])
-    ov.save_model(ov_model, f"{file_name}")
+    ov_model = ov.convert_model(baseline_tuple[0], example_input=baseline_tuple[2], input=baseline_tuple[1])
+    ov.save_model(ov_model, f"{file_name}", compress_to_fp16=False)
     return ov_model
 
 

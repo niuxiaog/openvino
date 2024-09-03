@@ -88,10 +88,10 @@ if [ "${BASELINE_MODEL}" ] && [ "${IS_DYNAMIC}" ]; then
 fi
 
 # Kernel config.
-LAYERS=( 1024 2048 4096 8192 )
-MINI_BATCHES=( 128 256 512 )
-#LAYERS=( 1024 )
-#MINI_BATCHES=( 256 )
+# LAYERS=( 1024 2048 4096 8192 )
+# MINI_BATCHES=( 128 256 512 )
+LAYERS=( 1024 )
+MINI_BATCHES=( 128 )
 if [ ! "${DATA_TYPE}" ]; then
     DATA_TYPE="f32"
 fi
@@ -118,6 +118,7 @@ for MB in "${MINI_BATCHES[@]}"; do
     if [ "${IS_DYNAMIC}" ]; then
         GEN_FLAGS+=(--dynamic)
     fi
+    # echo "Gen Model cmd: python3 ${MODEL_GEN} ${MODEL_CONFIG[@]} ${GEN_FLAGS[@]}"
     python3 ${MODEL_GEN} "${MODEL_CONFIG[@]}" "${GEN_FLAGS[@]}"
     if [ $? != 0 ]; then
         echo "Failed to generate model"
