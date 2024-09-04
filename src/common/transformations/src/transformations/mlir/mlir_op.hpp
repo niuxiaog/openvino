@@ -29,15 +29,35 @@ enum MlirMode {
     MLIR_MODE_DEFAULT,
 };
 
+using JitModuleFuncT = void (*)(void**);
+static const char defaultFoldName[] = "runtime_fold";
+
+struct FoldingInfo {
+    int num_orig_args;
+    llvm::ArrayRef<int> fold_args;
+    llvm::ArrayRef<int> compute_args;
+    llvm::ArrayRef<int64_t> fold_buffer_ids;
+    JitModuleFuncT fold_func;
+};
+
+struct CachedBuffer {
+    void* buffer;
+    std::vector<int64_t> shape;
+    std::vector<int64_t> strides;
+};
 
 class MLIREvaluate {
     OwningOpRef<ModuleOp> module;  // FIXME: needs to be kept?
     std::unique_ptr<ExecutionEngine> engine;
 
+    void set_folding_info();
 public:
 
     MLIREvaluate(OwningOpRef<ModuleOp> _module, MlirMode mode);
+    ~MLIREvaluate();
     bool invoke_packed(std::vector<void*>& args);
+    FoldingInfo folding_info;
+    std::unordered_map<int64_t, CachedBuffer> cached_const_buffers;
 };
 
 
@@ -49,6 +69,8 @@ class OPENVINO_API MLIROp : public ov::op::Op {
     std::shared_ptr<MLIREvaluate> engine;
     OVOutputTypes output_types;
     DimensionsMap dimensions_map;
+
+    bool is_first_execution = true;
 
 public:
 

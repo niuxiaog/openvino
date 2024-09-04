@@ -241,6 +241,13 @@ struct MemRefDescriptor {
         }
     }
 
+    MemRefDescriptor(ov::mlir::CachedBuffer buffer)
+        : allocated(buffer.buffer),
+          aligned(buffer.buffer),
+          offset(0),
+          shape(buffer.shape),
+          strides(buffer.strides) {}
+
     void* allocated;
     void* aligned;
     int64_t offset;
@@ -267,6 +274,66 @@ namespace mlir {
 
 using namespace ::mlir;
 
+void MLIREvaluate::set_folding_info() {
+    auto expectArgs = engine->lookup("__num_orig_num_args");
+    if (!expectArgs) {
+        return;
+    }
+    folding_info.num_orig_args = *reinterpret_cast<int32_t*>(*expectArgs);
+
+    {
+        auto expectFold = engine->lookupPacked(defaultFoldName);
+        if (!expectFold) {
+            std::cout << "Can not lookupPacked runtime_fold func\n";
+            return;
+        }
+        folding_info.fold_func = *expectFold;
+    }
+
+    {
+        auto expectBufferIds = engine->lookup("__runtime_fold_buffer_ids_");
+        if (!expectBufferIds) {
+            return;
+        }
+        auto raw = reinterpret_cast<int64_t*>(*expectBufferIds);
+        folding_info.fold_buffer_ids = llvm::ArrayRef<int64_t>{raw + 1, raw[0]};
+    }
+
+    {
+        auto expectFold = engine->lookup("__fold_args");
+        if (!expectFold) {
+            return;
+        }
+        auto raw = reinterpret_cast<int32_t*>(*expectFold);
+        folding_info.fold_args = llvm::ArrayRef<int32_t>{raw + 1, raw[0]};
+    }
+
+    {
+        auto expect = engine->lookup("__compute_args");
+        if (!expect) {
+            return;
+        }
+        auto raw = reinterpret_cast<int32_t*>(*expect);
+        folding_info.compute_args = llvm::ArrayRef<int32_t>{raw + 1, raw[0]};
+    }
+
+    // TODO: Hardcode here. We need the size (and shape) of each buffer.
+    for (auto id : folding_info.fold_buffer_ids) {
+        std::vector<int64_t> shape;
+        if (id == 0) {
+            shape = {512, 1024};
+        } else if (id == 1) {
+            shape = {512};
+        }
+        size_t size = std::accumulate(shape.begin(), shape.end(), /* f32 */ 4, std::multiplies<size_t>());
+        std::vector<int64_t> strides(shape.size(), 1);
+        for (int i = strides.size() - 2; i >= 0; --i) {
+            strides[i] = strides[i + 1] * shape[i + 1];
+        }
+        void* buffer = std::aligned_alloc(/*alignment*/ 64, size);
+        cached_const_buffers[id] = CachedBuffer{buffer, shape, strides};
+    }
+}
 
 MLIREvaluate::MLIREvaluate(OwningOpRef<mlir::ModuleOp> _module, MlirMode mode) :
     module(std::move(_module)) {
@@ -301,6 +368,14 @@ MLIREvaluate::MLIREvaluate(OwningOpRef<mlir::ModuleOp> _module, MlirMode mode) :
     } else {
         llvm::errs() << "failed to construct an execution engine\n";
         abort();
+    }
+
+    set_folding_info();
+}
+
+MLIREvaluate::~MLIREvaluate() {
+    for (auto pair : cached_const_buffers) {
+        std::free(pair.second.buffer);
     }
 }
 
@@ -360,6 +435,29 @@ bool MLIROp::evaluate(ov::TensorVector& outputs, const ov::TensorVector& inputs)
     std::for_each(memref_args.begin(), memref_args.end(), [&args](MemRefDescriptor& x) {
         x.append_to_packed_args(args);
     });
+
+    for (auto id : engine->folding_info.fold_buffer_ids) {
+        memref_args.push_back(MemRefDescriptor(engine->cached_const_buffers[id]));
+    }
+
+    args.clear();
+    if (is_first_execution) { // Call fold
+        for (auto id : engine->folding_info.fold_args) {
+            memref_args[id].append_to_packed_args(args);
+        }
+        OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] First executon, call fold func\n");
+        engine->folding_info.fold_func(args.data());
+
+        // TODO: Modify the flag. (This is a const function and can not modify it directly.)
+        // is_first_execution = false;
+    }
+
+    // Call entry
+    args.clear();
+    OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] Call entry func\n");
+    for (auto id : engine->folding_info.compute_args) {
+        memref_args[id].append_to_packed_args(args);
+    }
 
     //std::cerr << "[ INFO ] Running kernel in MLIROp::evaluate\n";
     return engine->invoke_packed(args);
