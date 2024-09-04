@@ -3,10 +3,10 @@ import torch
 import torch.nn as nn
 
 
-# input: (128, 16). weight: (16, 64). bias: (64). output: (128, 64)
+# input: (128, 1024). weight: (1024, 512). bias: (512). output: (128, 512)
 batch_size = 128
-in_features = 16
-out_features = 64
+in_features = 1024
+out_features = 512
 
 # class ToyNet(nn.Module):
 #     def __init__(self, in_features, out_features):
@@ -26,9 +26,12 @@ out_features = 64
 class ToyNet(nn.Module):
     def __init__(self, in_features, out_features):
         super(ToyNet, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
         self.weight = nn.Parameter(torch.randn(in_features, out_features), requires_grad=False)
+        self.bias = nn.Parameter(torch.randn(out_features), requires_grad=False)
     def forward(self, x):
-        out = x @ self.weight
+        out = x @ self.weight + self.bias
         out = torch.relu(out)
         return out
 
@@ -68,17 +71,15 @@ model = ToyNet(in_features, out_features)
 example = torch.randn(batch_size, in_features)
 print("===== Convert model start =====")
 ov_model = ov.convert_model(model, example_input=(example,))
-print("===== Convert model finish =====")
-
-
 ov_model.reshape([batch_size, in_features])
 print(ov_model)
+print("===== Convert model finish =====")
 
-print(ov_model.is_dynamic())
-print(ov_model.get_ordered_ops())
-weight = ov_model.get_ordered_ops()[1]
-print(weight.get_output_tensor(0))
-print(weight.get_output_tensor(0).shape)
+# print(ov_model.is_dynamic())
+# print(ov_model.get_ordered_ops())
+# weight = ov_model.get_ordered_ops()[1]
+# print(weight.get_output_tensor(0))
+# print(weight.get_output_tensor(0).shape)
 
 # print("Compress weights start")
 # ov_model = compress_weights(ov_model)
@@ -86,9 +87,9 @@ print(weight.get_output_tensor(0).shape)
 # print("Compress weights finish")
 
 # openvino.save_model(model: ov::Model, output_model: object, compress_to_fp16: bool = True)
-saved_path = './toy-net.xml'
 print("save model start")
-ov.save_model(ov_model, saved_path, False)
+saved_path = './toy-net.xml'
+ov.save_model(ov_model, saved_path, compress_to_fp16=False)
 print("save model finish")
 
 # compile the model for CPU device
@@ -102,8 +103,8 @@ device_name = 'CPU'
 
 print("===== Compile model start =====")
 compiled_model = core.compile_model(ov_model, device_name)
-print("===== Compile model finish =====")
 print(compiled_model)
+print("===== Compile model finish =====")
 
 # infer the model on random data
 print("===== #1 run start =====")
