@@ -202,6 +202,8 @@ mlir::OwningOpRef<mlir::ModuleOp> ngraph_to_mlir(MLIRContext* context,
     func.getOperation()->setAttr("compiletime_const_args_index",
                                  moduleBuilder.getI32ArrayAttr(compiletime_const_args_index));
 
+    func.getOperation()->setAttr(LLVM::LLVMDialect::getEmitCWrapperAttrName(), UnitAttr::get(context));
+
     ConversionContext conversion_context(context, &block_builder);
 
     for (size_t i = 0; i < inputs.size(); ++i) {

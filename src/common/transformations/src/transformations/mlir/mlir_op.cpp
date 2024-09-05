@@ -278,16 +278,19 @@ using namespace ::mlir;
 static std::unordered_set<const MLIROp *> executed_ops;
 
 void MLIREvaluate::set_folding_info() {
-    auto expectArgs = engine->lookup("__num_orig_num_args");
-    if (!expectArgs) {
-        return;
+    {
+        auto expectArgs = engine->lookup("__num_orig_num_args");
+        if (!expectArgs) {
+            llvm::consumeError(expectArgs.takeError());
+            return;
+        }
+        folding_info.num_orig_args = *reinterpret_cast<int32_t*>(*expectArgs);
     }
-    folding_info.num_orig_args = *reinterpret_cast<int32_t*>(*expectArgs);
 
     {
         auto expectFold = engine->lookupPacked(defaultFoldName);
         if (!expectFold) {
-            std::cout << "Can not lookupPacked runtime_fold func\n";
+            llvm::consumeError(expectFold.takeError());
             return;
         }
         folding_info.fold_func = *expectFold;
@@ -296,6 +299,7 @@ void MLIREvaluate::set_folding_info() {
     {
         auto expectBufferIds = engine->lookup("__runtime_fold_buffer_ids_");
         if (!expectBufferIds) {
+            llvm::consumeError(expectBufferIds.takeError());
             return;
         }
         auto raw = reinterpret_cast<int64_t*>(*expectBufferIds);
@@ -305,6 +309,7 @@ void MLIREvaluate::set_folding_info() {
     {
         auto expectFold = engine->lookup("__fold_args");
         if (!expectFold) {
+            llvm::consumeError(expectFold.takeError());
             return;
         }
         auto raw = reinterpret_cast<int32_t*>(*expectFold);
@@ -314,6 +319,7 @@ void MLIREvaluate::set_folding_info() {
     {
         auto expect = engine->lookup("__compute_args");
         if (!expect) {
+            llvm::consumeError(expect.takeError());
             return;
         }
         auto raw = reinterpret_cast<int32_t*>(*expect);
@@ -438,6 +444,11 @@ bool MLIROp::evaluate(ov::TensorVector& outputs, const ov::TensorVector& inputs)
     std::for_each(memref_args.begin(), memref_args.end(), [&args](MemRefDescriptor& x) {
         x.append_to_packed_args(args);
     });
+
+    if (engine->folding_info.fold_func == nullptr) {  // No folding, call entry directly
+        OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] Call entry func directly\n");
+        return engine->invoke_packed(args);
+    }
 
     for (auto id : engine->folding_info.fold_buffer_ids) {
         memref_args.push_back(MemRefDescriptor(engine->cached_const_buffers[id]));

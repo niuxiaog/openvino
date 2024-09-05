@@ -37,7 +37,7 @@ struct FoldingInfo {
     llvm::ArrayRef<int> fold_args;
     llvm::ArrayRef<int> compute_args;
     llvm::ArrayRef<int64_t> fold_buffer_ids;
-    JitModuleFuncT fold_func;
+    JitModuleFuncT fold_func = nullptr;
 };
 
 struct CachedBuffer {

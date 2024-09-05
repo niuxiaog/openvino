@@ -1,7 +1,7 @@
 import openvino as ov
 import torch
 import torch.nn as nn
-
+from ml_dtypes import bfloat16
 
 # input: (128, 1024). weight: (1024, 512). bias: (512). output: (128, 512)
 batch_size = 128
@@ -109,13 +109,19 @@ compiled_model = core.compile_model(ov_model, device_name)
 print(compiled_model)
 print("===== Compile model finish =====")
 
+if use_bf16:
+    example_np = example.view(dtype=torch.uint16).numpy().view(bfloat16)
+else:
+    example_np = example.numpy()
+
 # infer the model on random data
 print("===== #1 run start =====")
-output = compiled_model({0: example.numpy()})
+
+output = compiled_model({0: example_np})
 print("===== #1 run finish =====")
 
 print("===== #2 run start =====")
-output = compiled_model({0: example.numpy()})
+output = compiled_model({0: example_np})
 print("===== #2 run finish =====")
 
 

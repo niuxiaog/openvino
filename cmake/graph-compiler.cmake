@@ -12,7 +12,7 @@ if (NOT DEFINED GRAPH_COMPILER_LIBS)
         FetchContent_Declare(
                 GC
                 GIT_REPOSITORY https://github.com/intel/graph-compiler.git
-                GIT_TAG main # xgniu/constant_weights_folding_test # zhicong/perf_test2 # yifei/mlp_benching_new
+                GIT_TAG xgniu/constant_weights_folding # zhicong/perf_test2 # yifei/mlp_benching_new
                 FIND_PACKAGE_ARGS NAMES GraphCompiler
         )
 
