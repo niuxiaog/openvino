@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
 #include "mlir/Pass/PassManager.h"
@@ -274,6 +275,8 @@ namespace mlir {
 
 using namespace ::mlir;
 
+static std::unordered_set<const MLIROp *> executed_ops;
+
 void MLIREvaluate::set_folding_info() {
     auto expectArgs = engine->lookup("__num_orig_num_args");
     if (!expectArgs) {
@@ -441,15 +444,16 @@ bool MLIROp::evaluate(ov::TensorVector& outputs, const ov::TensorVector& inputs)
     }
 
     args.clear();
-    if (is_first_execution) { // Call fold
+    if (executed_ops.count(this) == 0) { // Call fold
         for (auto id : engine->folding_info.fold_args) {
             memref_args[id].append_to_packed_args(args);
         }
         OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] First executon, call fold func\n");
         engine->folding_info.fold_func(args.data());
 
-        // TODO: Modify the flag. (This is a const function and can not modify it directly.)
-        // is_first_execution = false;
+        // TODO: Find a better way to check if the op has executed. 
+        // This is a const function and can not modify member attributes directly.
+        executed_ops.insert(this);
     }
 
     // Call entry

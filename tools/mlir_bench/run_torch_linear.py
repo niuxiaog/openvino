@@ -8,6 +8,9 @@ batch_size = 128
 in_features = 1024
 out_features = 512
 
+use_bf16 = True
+dtype = torch.bfloat16 if use_bf16 else torch.float
+
 # class ToyNet(nn.Module):
 #     def __init__(self, in_features, out_features):
 #         super(ToyNet, self).__init__()
@@ -28,8 +31,8 @@ class ToyNet(nn.Module):
         super(ToyNet, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = nn.Parameter(torch.randn(in_features, out_features), requires_grad=False)
-        self.bias = nn.Parameter(torch.randn(out_features), requires_grad=False)
+        self.weight = nn.Parameter(torch.randn(in_features, out_features, dtype=dtype), requires_grad=False)
+        self.bias = nn.Parameter(torch.randn(out_features, dtype=dtype), requires_grad=False)
     def forward(self, x):
         out = x @ self.weight + self.bias
         out = torch.relu(out)
@@ -68,7 +71,7 @@ model = ToyNet(in_features, out_features)
 # model = torch.hub.load("pytorch/vision", "shufflenet_v2_x1_0", weights="DEFAULT")
 
 # convert the model into OpenVINO model
-example = torch.randn(batch_size, in_features)
+example = torch.randn(batch_size, in_features, dtype=dtype)
 print("===== Convert model start =====")
 ov_model = ov.convert_model(model, example_input=(example,))
 ov_model.reshape([batch_size, in_features])

@@ -70,8 +70,6 @@ class OPENVINO_API MLIROp : public ov::op::Op {
     OVOutputTypes output_types;
     DimensionsMap dimensions_map;
 
-    bool is_first_execution = true;
-
 public:
 
     OPENVINO_OP("MLIROp");
