@@ -279,7 +279,7 @@ static std::unordered_set<const MLIROp *> executed_ops;
 
 void MLIREvaluate::set_folding_info() {
     {
-        auto expectArgs = engine->lookup("__num_orig_num_args");
+        auto expectArgs = engine->lookup("__num_orig_args");
         if (!expectArgs) {
             llvm::consumeError(expectArgs.takeError());
             return;
@@ -297,7 +297,7 @@ void MLIREvaluate::set_folding_info() {
     }
 
     {
-        auto expectBufferIds = engine->lookup("__runtime_fold_buffer_ids_");
+        auto expectBufferIds = engine->lookup("__runtime_fold_buffer_ids");
         if (!expectBufferIds) {
             llvm::consumeError(expectBufferIds.takeError());
             return;
@@ -326,15 +326,41 @@ void MLIREvaluate::set_folding_info() {
         folding_info.compute_args = llvm::ArrayRef<int32_t>{raw + 1, raw[0]};
     }
 
-    // TODO: Hardcode here. We need the size (and shape) of each buffer.
-    for (auto id : folding_info.fold_buffer_ids) {
-        std::vector<int64_t> shape;
-        if (id == 0) {
-            shape = {512, 1024};
-        } else if (id == 1) {
-            shape = {512};
+    {
+        auto expect = engine->lookup("__folded_ranks");
+        if (!expect) {
+            llvm::consumeError(expect.takeError());
+            return;
         }
-        size_t size = std::accumulate(shape.begin(), shape.end(), /* f32 */ 4, std::multiplies<size_t>());
+        auto raw = reinterpret_cast<int32_t*>(*expect);
+        folding_info.folded_ranks = llvm::ArrayRef<int32_t>{raw, folding_info.fold_buffer_ids.size()};
+    }
+
+    {
+        auto expect = engine->lookup("__folded_shapes");
+        if (!expect) {
+            llvm::consumeError(expect.takeError());
+            return;
+        }
+        int32_t size = folding_info.fold_buffer_ids.size();  // element bytes of each buffer
+        for (auto r : folding_info.folded_ranks) {
+            size += r;
+        }
+        auto raw = reinterpret_cast<int64_t*>(*expect);
+        llvm::ArrayRef<int64_t> folded_shapes = llvm::ArrayRef<int64_t>{raw, size};
+        int pos = 0;
+        for (int i = 0; i < folding_info.folded_ranks.size(); ++i) {
+            std::vector<int64_t> shape(folded_shapes.begin() + pos,
+                                       folded_shapes.begin() + pos + folding_info.folded_ranks[i] + 1);
+            pos += folding_info.folded_ranks[i] + 1;
+            folding_info.folded_shapes.push_back(shape);
+        }
+    }
+
+    for (auto id : folding_info.fold_buffer_ids) {
+        std::vector<int64_t> shape = folding_info.folded_shapes[id];
+        size_t size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int64_t>());
+        shape.pop_back();  // delete the last which is bytes of element
         std::vector<int64_t> strides(shape.size(), 1);
         for (int i = strides.size() - 2; i >= 0; --i) {
             strides[i] = strides[i + 1] * shape[i + 1];

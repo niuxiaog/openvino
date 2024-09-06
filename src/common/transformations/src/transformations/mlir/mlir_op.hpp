@@ -34,9 +34,11 @@ static const char defaultFoldName[] = "runtime_fold";
 
 struct FoldingInfo {
     int num_orig_args;
-    llvm::ArrayRef<int> fold_args;
-    llvm::ArrayRef<int> compute_args;
+    llvm::ArrayRef<int32_t> fold_args;
+    llvm::ArrayRef<int32_t> compute_args;
     llvm::ArrayRef<int64_t> fold_buffer_ids;
+    llvm::ArrayRef<int32_t> folded_ranks;
+    std::vector<std::vector<int64_t>> folded_shapes;
     JitModuleFuncT fold_func = nullptr;
 };
 
