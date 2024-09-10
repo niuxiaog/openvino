@@ -25,10 +25,16 @@ struct ConvertRelu {
         auto outType = importTensor(context.context, ov_output_shape, ov_output_element_type);
         auto dynamic_dimensions = context.get_dynamic_dimension_values(ov_output_shape);
         auto empty = builder.create<tensor::EmptyOp>(loc, outType, dynamic_dimensions);
-        auto zero = getConstant(builder, ov_output_element_type, 0);
-        auto fill = builder.create<linalg::FillOp>(loc, mlir::ValueRange{zero}, mlir::ValueRange{empty});
+        auto denseAttr = DenseElementsAttr::get(
+            outType,
+            builder.getFloatAttr(importPrecision(builder.getContext(), ov_output_element_type), 0.0));
+        auto zeros = builder.create<arith::ConstantOp>(loc, denseAttr);
         auto relu =
-            builder.create<linalg::MaxOp>(loc, mlir::ValueRange{input, fill.getResult(0)}, mlir::ValueRange{empty});
+            builder.create<linalg::MaxOp>(loc, mlir::ValueRange{input, zeros.getResult()}, mlir::ValueRange{empty});
+        // auto zero = getConstant(builder, ov_output_element_type, 0);
+        // auto fill = builder.create<linalg::FillOp>(loc, mlir::ValueRange{zero}, mlir::ValueRange{empty});
+        // auto relu =
+        //     builder.create<linalg::MaxOp>(loc, mlir::ValueRange{input, fill.getResult(0)}, mlir::ValueRange{empty});
         context.addOutputs(node, relu);
     }
 };
