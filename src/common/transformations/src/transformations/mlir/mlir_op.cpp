@@ -443,65 +443,102 @@ NodePtr MLIROp::clone_with_new_inputs(const ov::OutputVector& new_args) const {
 }
 
 bool MLIROp::evaluate(ov::TensorVector& outputs, const ov::TensorVector& inputs) const {
-    std::vector<MemRefDescriptor> memref_args;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        memref_args.push_back(MemRefDescriptor(inputs[i]));
-    }
-    for (size_t i = 0; i < outputs.size(); ++i) {
-        // TODO: Optimize by adding all dimensions to dimensions_map, not only dynamic
-        Shape target;
-        PartialShape expected = get_output_partial_shape(i);
-        for(size_t j = 0; j < expected.size(); ++j) {
-            auto dim = expected[j];
-            if(dim.is_dynamic()) {
-                int input_index, dim_index;
-                std::tie(input_index, dim_index) = dimensions_map[i][j];
-                target.push_back(inputs[input_index].get_shape()[dim_index]);
-            } else {
-                target.push_back(dim.get_length());
-            }
+    OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] input size: " << inputs.size() << ", output size: " << outputs.size() << "\n");
+    if (engine->folding_info.fold_func == nullptr) {  // No folding, call entry() directly
+        std::vector<MemRefDescriptor> memref_args;
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            memref_args.push_back(MemRefDescriptor(inputs[i]));
         }
-        //std::cerr << "[ DEBUG ] Set outputs[" << i << "].shape(" << target << ")\n";
-        outputs[i].set_shape(target);
-        memref_args.push_back(MemRefDescriptor(outputs[i]));
-    }
-    std::vector<void*> args;
+        for (size_t i = 0; i < outputs.size(); ++i) {
+            // TODO: Optimize by adding all dimensions to dimensions_map, not only dynamic
+            Shape target;
+            PartialShape expected = get_output_partial_shape(i);
+            for (size_t j = 0; j < expected.size(); ++j) {
+                auto dim = expected[j];
+                if (dim.is_dynamic()) {
+                    int input_index, dim_index;
+                    std::tie(input_index, dim_index) = dimensions_map[i][j];
+                    target.push_back(inputs[input_index].get_shape()[dim_index]);
+                } else {
+                    target.push_back(dim.get_length());
+                }
+            }
+            // std::cerr << "[ DEBUG ] Set outputs[" << i << "].shape(" << target << ")\n";
+            outputs[i].set_shape(target);
+            memref_args.push_back(MemRefDescriptor(outputs[i]));
+        }
 
-    std::for_each(memref_args.begin(), memref_args.end(), [&args](MemRefDescriptor& x) {
-        x.append_to_packed_args(args);
-    });
+        std::vector<void*> args;
+        std::for_each(memref_args.begin(), memref_args.end(), [&args](MemRefDescriptor& x) {
+            x.append_to_packed_args(args);
+        });
 
-    if (engine->folding_info.fold_func == nullptr) {  // No folding, call entry directly
         OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] Call entry func directly\n");
         return engine->invoke_packed(args);
-    }
+    } else {                                  // call fold() first, then call entry()
+        if (executed_ops.count(this) == 0) {  // Call fold()
+            std::vector<MemRefDescriptor> memref_args;
+            // Args of fold(): {constant inputs, folded inputs}.
+            for (auto id : engine->folding_info.fold_args) {
+                if (id < engine->folding_info.num_orig_args) {
+                    memref_args.push_back(MemRefDescriptor(inputs[id]));
+                } else {
+                    int64_t buffer_id = id - engine->folding_info.num_orig_args;
+                    assert(engine->cached_const_buffers.find(buffer_id) != engine->cached_const_buffers.end());
+                    memref_args.push_back(MemRefDescriptor(engine->cached_const_buffers[buffer_id]));
+                }
+            }
+            std::vector<void*> args;
+            std::for_each(memref_args.begin(), memref_args.end(), [&args](MemRefDescriptor& x) {
+                x.append_to_packed_args(args);
+            });
+            OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] First executon, call fold func\n");
+            engine->folding_info.fold_func(args.data());
 
-    for (auto id : engine->folding_info.fold_buffer_ids) {
-        memref_args.push_back(MemRefDescriptor(engine->cached_const_buffers[id]));
-    }
-
-    args.clear();
-    if (executed_ops.count(this) == 0) { // Call fold
-        for (auto id : engine->folding_info.fold_args) {
-            memref_args[id].append_to_packed_args(args);
+            // TODO: Find a better way to check if the op has executed.
+            // This is a const function and can not modify member attributes directly.
+            executed_ops.insert(this);
         }
-        OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] First executon, call fold func\n");
-        engine->folding_info.fold_func(args.data());
+        // call entry()
+        std::vector<MemRefDescriptor> memref_args;
+        // Args of entry(): {non-constant inputs, outputs, folded inputs}.
+        for (auto id : engine->folding_info.compute_args) {
+            // num_orig_args = inputs.size() + outputs.size()
+            // if (id < engine->folding_info.num_orig_args) {
+            if (id < inputs.size()) {  // non-constant input
+                memref_args.push_back(MemRefDescriptor(inputs[id]));
+            } else if (id < engine->folding_info.num_orig_args) {  // output
+                int i = id - inputs.size();                        // output id
+                Shape target;
+                PartialShape expected = get_output_partial_shape(i);
+                for (size_t j = 0; j < expected.size(); ++j) {
+                    auto dim = expected[j];
+                    if (dim.is_dynamic()) {
+                        int input_index, dim_index;
+                        std::tie(input_index, dim_index) = dimensions_map[i][j];
+                        target.push_back(inputs[input_index].get_shape()[dim_index]);
+                    } else {
+                        target.push_back(dim.get_length());
+                    }
+                }
+                // std::cerr << "[ DEBUG ] Set outputs[" << i << "].shape(" << target << ")\n";
+                outputs[i].set_shape(target);
+                memref_args.push_back(MemRefDescriptor(outputs[i]));
+            } else {  // folded input
+                int64_t buffer_id = id - engine->folding_info.num_orig_args;
+                assert(engine->cached_const_buffers.find(buffer_id) != engine->cached_const_buffers.end());
+                memref_args.push_back(MemRefDescriptor(engine->cached_const_buffers[buffer_id]));
+            }
+        }
 
-        // TODO: Find a better way to check if the op has executed. 
-        // This is a const function and can not modify member attributes directly.
-        executed_ops.insert(this);
+        std::vector<void*> args;
+        std::for_each(memref_args.begin(), memref_args.end(), [&args](MemRefDescriptor& x) {
+            x.append_to_packed_args(args);
+        });
+        OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] Call entry func\n");
+        // std::cerr << "[ INFO ] Running kernel in MLIROp::evaluate\n";
+        return engine->invoke_packed(args);
     }
-
-    // Call entry
-    args.clear();
-    OPENVINO_MLIR_DEBUG_PRINT("[ DEBUG ] Call entry func\n");
-    for (auto id : engine->folding_info.compute_args) {
-        memref_args[id].append_to_packed_args(args);
-    }
-
-    //std::cerr << "[ INFO ] Running kernel in MLIROp::evaluate\n";
-    return engine->invoke_packed(args);
 }
 
 bool MLIROp::has_evaluate() const {

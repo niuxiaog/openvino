@@ -33,7 +33,7 @@ using JitModuleFuncT = void (*)(void**);
 static const char defaultFoldName[] = "runtime_fold";
 
 struct FoldingInfo {
-    int num_orig_args;
+    int32_t num_orig_args;
     llvm::ArrayRef<int32_t> fold_args;
     llvm::ArrayRef<int32_t> compute_args;
     llvm::ArrayRef<int64_t> fold_buffer_ids;
