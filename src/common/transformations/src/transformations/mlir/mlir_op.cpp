@@ -23,6 +23,9 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "mlir-c/ExecutionEngine.h"
+#include "mlir/CAPI/IR.h"
+#include "mlir/CAPI/Wrap.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/Bufferization/Transforms/Passes.h"
@@ -393,17 +396,30 @@ MLIREvaluate::MLIREvaluate(OwningOpRef<mlir::ModuleOp> _module, MlirMode mode) :
                                                         /*sizeLevel=*/0,  // FIXME: HARDCODED
                                                         /*targetMachine=*/nullptr);
 
-    mlir::ExecutionEngineOptions engineOptions;
-    engineOptions.transformer = optPipeline;  // opt level looks to be overriden in lowerToLLVMIR, but is still used
-                                                // in `create` independently
-    engineOptions.llvmModuleBuilder = lowerToLLVMIR;
-    auto maybeEngine = mlir::ExecutionEngine::create(module.get(), engineOptions);
-    if (maybeEngine) {
-        engine = std::move(maybeEngine.get());
-    } else {
-        llvm::errs() << "failed to construct an execution engine\n";
-        abort();
-    }
+    // mlir::ExecutionEngineOptions engineOptions;
+    // engineOptions.transformer = optPipeline;  // opt level looks to be overriden in lowerToLLVMIR, but is still used
+    //                                             // in `create` independently
+    // engineOptions.llvmModuleBuilder = lowerToLLVMIR;
+    // engineOptions.enableObjectDump = true;
+    // auto maybeEngine = mlir::ExecutionEngine::create(module.get(), engineOptions);
+
+    int optLevel = 3;
+    const std::vector<std::string> sharedLibPaths;
+    // sharedLibPaths = {"/home/xiaoguang/ov-gc/llvm-project/llvm-install/lib/libmlir_c_runner_utils.so",
+    //                   "/home/xiaoguang/ov-gc/llvm-project/llvm-install/lib/libmlir_runner_utils.so",
+    //                   "/home/xiaoguang/ov-gc/graph-compiler/build/lib/libGcCpuRuntime.so"};
+    bool enableObjectDump = true;
+    llvm::SmallVector<MlirStringRef, 4> libPaths;
+    for (const std::string &path : sharedLibPaths)
+        libPaths.push_back({path.c_str(), path.length()});
+    MlirExecutionEngine executionEngine =
+        mlirExecutionEngineCreate(wrap(module.get()), optLevel, libPaths.size(),
+                                libPaths.data(), enableObjectDump);
+    if (mlirExecutionEngineIsNull(executionEngine))
+        throw std::runtime_error("Failure while creating the ExecutionEngine.");
+
+    engine = std::unique_ptr<mlir::ExecutionEngine>(static_cast<mlir::ExecutionEngine *>(executionEngine.ptr));
+    // engine->dumpToObjectFile("./dumped_ov.o");
 
     set_folding_info();
 }
